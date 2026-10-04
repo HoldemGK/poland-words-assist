@@ -1,3 +1,5 @@
+# Polish Vocab Bot Infrastructure (Cloud Run Function, Secret Manager, Cloud Scheduler)
+
 # --- Service APIs ---
 resource "google_project_service" "enabled_apis" {
   for_each = toset([
