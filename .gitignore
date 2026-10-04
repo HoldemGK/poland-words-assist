@@ -26,6 +26,9 @@ wheels/
 # Virtual environments & local env
 .env
 .env.local
+*.key.json
+terraform-key.json
+*credential*.json
 
 # Pytest / Coverage
 .pytest_cache/
