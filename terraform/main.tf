@@ -69,9 +69,9 @@ resource "google_secret_manager_secret_version" "elevenlabs_key_val" {
 # Grant SA access to read secrets
 resource "google_secret_manager_secret_iam_member" "secret_access" {
   for_each = {
-    telegram   = google_secret_manager_secret.telegram_token.id
-    openai     = google_secret_manager_secret.openai_key.id
-    elevenlabs = google_secret_manager_secret.elevenlabs_key.id
+    telegram   = google_secret_manager_secret.telegram_token.secret_id
+    openai     = google_secret_manager_secret.openai_key.secret_id
+    elevenlabs = google_secret_manager_secret.elevenlabs_key.secret_id
   }
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
