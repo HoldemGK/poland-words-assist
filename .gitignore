@@ -27,6 +27,8 @@ wheels/
 .env
 .env.local
 *.key.json
+key.json
+*.json
 terraform-key.json
 *credential*.json
 
