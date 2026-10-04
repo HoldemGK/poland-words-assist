@@ -68,12 +68,12 @@ resource "google_secret_manager_secret_version" "elevenlabs_key_val" {
 
 # Grant SA access to read secrets
 resource "google_secret_manager_secret_iam_member" "secret_access" {
-  for_each = toset([
-    google_secret_manager_secret.telegram_token.id,
-    google_secret_manager_secret.openai_key.id,
-    google_secret_manager_secret.elevenlabs_key.id
-  ])
-  secret_id = each.key
+  for_each = {
+    telegram   = google_secret_manager_secret.telegram_token.id
+    openai     = google_secret_manager_secret.openai_key.id
+    elevenlabs = google_secret_manager_secret.elevenlabs_key.id
+  }
+  secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.bot_sa.email}"
 }
