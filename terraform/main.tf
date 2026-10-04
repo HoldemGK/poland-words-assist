@@ -2,7 +2,7 @@ terraform {
   required_version = ">= 1.6.0"
 
   cloud {
-    organization = "gkllc"
+    organization = "gk-home-lab"
 
     workspaces {
       name    = "poland-words-assist"
