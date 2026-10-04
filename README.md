@@ -4,7 +4,7 @@ Automated Polish vocabulary drill system for Telegram channels powered by Google
 
 ---
 
-## 🏗 System Architecture
+## 🏗 System  Architecture
 
 ```text
  [Cloud Scheduler (Cron: 0 9,12,15,18,21 * * *)]
