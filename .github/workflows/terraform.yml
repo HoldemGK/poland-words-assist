@@ -100,13 +100,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Google Cloud Auth: Option A (Workload Identity Federation - Recommended)
+      # Authenticate to Google Cloud (Workload Identity Federation)
       - name: Authenticate to Google Cloud (Workload Identity Federation)
-        if: ${{ (secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '') || (vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '') }}
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER || vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT || vars.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER || secrets.GCP_WORKLOAD_IDENTITY_PROVIDER || 'projects/975371324486/locations/global/workloadIdentityPools/github-pool/providers/github-provider' }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT || secrets.GCP_SERVICE_ACCOUNT || 'tf-cloud@polan-words-assist.iam.gserviceaccount.com' }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -203,13 +202,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Workload Identity Federation
+      # Authenticate to Google Cloud (Workload Identity Federation)
       - name: Authenticate to Google Cloud (Workload Identity Federation)
-        if: ${{ (secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '') || (vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '') }}
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER || vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT || vars.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER || secrets.GCP_WORKLOAD_IDENTITY_PROVIDER || 'projects/975371324486/locations/global/workloadIdentityPools/github-pool/providers/github-provider' }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT || secrets.GCP_SERVICE_ACCOUNT || 'tf-cloud@polan-words-assist.iam.gserviceaccount.com' }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
