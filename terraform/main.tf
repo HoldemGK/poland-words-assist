@@ -121,7 +121,7 @@ resource "google_cloudfunctions2_function" "vocab_function" {
   }
 
   service_config {
-    max_instance_count    = 1
+    max_instance_count    = 2
     min_instance_count    = 0
     available_memory      = "512M"
     timeout_seconds       = 120
