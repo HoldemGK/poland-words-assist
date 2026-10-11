@@ -160,6 +160,7 @@ resource "google_cloudfunctions2_function" "vocab_function" {
 
 # Allow Scheduler SA to invoke Function
 resource "google_cloud_run_service_iam_member" "invoker_role" {
+  project  = var.project_id
   location = google_cloudfunctions2_function.vocab_function.location
   service  = google_cloudfunctions2_function.vocab_function.name
   role     = "roles/run.invoker"

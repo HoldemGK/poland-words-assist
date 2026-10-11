@@ -42,16 +42,17 @@ jobs:
       TF_VAR_elevenlabs_voice_id: ${{ vars.TF_VAR_ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB' }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
       - name: Verify Confirmation Input
+        working-directory: ${{ github.workspace }}
         run: |
           if [ "${{ github.event.inputs.confirmation }}" != "DESTROY" ]; then
             echo "::error::Confirmation mismatch! You must type 'DESTROY' in all caps to proceed with deletion."
             exit 1
           fi
           echo "Confirmation verified. Proceeding with destroy plan."
-
-      - name: Checkout repository
-        uses: actions/checkout@v5
 
       # Authenticate to Google Cloud (Workload Identity Federation)
       - name: Authenticate to Google Cloud (Workload Identity Federation)
@@ -87,7 +88,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: destroy-tfplan
-          path: terraform/destroy.tfplan
+          path: |
+            terraform/destroy.tfplan
+            terraform/function-source.zip
           retention-days: 1
 
   # ============================================================================
@@ -133,6 +136,14 @@ jobs:
         with:
           name: destroy-tfplan
           path: terraform
+
+      - name: Verify Function Package
+        run: |
+          if [ ! -f function-source.zip ]; then
+            echo "function-source.zip not found, generating from src..."
+            python3 -c "import shutil; shutil.make_archive('function-source', 'zip', '../src')"
+          fi
+          ls -lh destroy.tfplan
 
       - name: Terraform Init
         run: terraform init
