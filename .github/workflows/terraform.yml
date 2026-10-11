@@ -123,7 +123,8 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: |
-          terraform plan -no-color -out=tfplan -input=false | tee plan_output.txt
+          set -eo pipefail
+          terraform plan -no-color -out=tfplan -input=false 2>&1 | tee plan_output.txt
 
       - name: Generate Plan Summary for Job
         if: always()
@@ -169,6 +170,7 @@ jobs:
             });
 
       - name: Archive Terraform Plan
+        if: success()
         uses: actions/upload-artifact@v6
         with:
           name: tfplan
