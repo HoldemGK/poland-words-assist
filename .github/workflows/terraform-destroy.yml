@@ -84,6 +84,12 @@ jobs:
           fi
           echo '```' >> $GITHUB_STEP_SUMMARY
 
+      - name: Ensure Function Package
+        run: |
+          if [ ! -f function-source.zip ]; then
+            python3 -c "import shutil; shutil.make_archive('function-source', 'zip', '../src')"
+          fi
+
       - name: Archive Destroy Plan
         uses: actions/upload-artifact@v6
         with:
@@ -137,13 +143,34 @@ jobs:
           name: destroy-tfplan
           path: terraform
 
-      - name: Verify Function Package
+      - name: Locate Destroy Plan and Prepare Environment
         run: |
-          if [ ! -f function-source.zip ]; then
-            echo "function-source.zip not found, generating from src..."
-            python3 -c "import shutil; shutil.make_archive('function-source', 'zip', '../src')"
+          # Locate destroy.tfplan anywhere in workspace and move into current directory
+          if [ ! -f destroy.tfplan ]; then
+            PLAN_FILE=$(find "${{ github.workspace }}" -name "destroy.tfplan" -print -quit)
+            if [ -n "$PLAN_FILE" ] && [ -f "$PLAN_FILE" ]; then
+              echo "Moving $PLAN_FILE to $(pwd)/destroy.tfplan"
+              mv "$PLAN_FILE" ./destroy.tfplan
+            else
+              echo "::error::destroy.tfplan not found in ${{ github.workspace }}"
+              find "${{ github.workspace }}" -maxdepth 3
+              exit 1
+            fi
           fi
-          ls -lh destroy.tfplan
+
+          # Ensure function-source.zip exists
+          if [ ! -f function-source.zip ]; then
+            ZIP_FILE=$(find "${{ github.workspace }}" -name "function-source.zip" -print -quit)
+            if [ -n "$ZIP_FILE" ] && [ -f "$ZIP_FILE" ]; then
+              echo "Copying $ZIP_FILE to $(pwd)/function-source.zip"
+              cp "$ZIP_FILE" ./function-source.zip
+            else
+              echo "Generating function-source.zip from ../src..."
+              python3 -c "import shutil; shutil.make_archive('function-source', 'zip', '../src')"
+            fi
+          fi
+
+          ls -lh destroy.tfplan function-source.zip
 
       - name: Terraform Init
         run: terraform init
