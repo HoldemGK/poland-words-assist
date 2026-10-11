@@ -61,6 +61,10 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER || secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT || secrets.GCP_SERVICE_ACCOUNT }}
 
+      - name: Ensure Cloud Resource Manager API is Enabled
+        run: |
+          gcloud services enable cloudresourcemanager.googleapis.com --project="${TF_VAR_project_id}" || true
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v4
         with:
@@ -143,6 +147,10 @@ jobs:
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER || secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT || secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Ensure Cloud Resource Manager API is Enabled
+        run: |
+          gcloud services enable cloudresourcemanager.googleapis.com --project="${TF_VAR_project_id}" || true
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v4
