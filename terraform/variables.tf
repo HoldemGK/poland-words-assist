@@ -23,6 +23,7 @@ variable "telegram_bot_token" {
 
 variable "telegram_chat_id" {
   type        = string
+  default     = "poland_words_assist_bot"
   description = "Telegram channel @username or numerical ID"
 }
 

@@ -90,7 +90,7 @@ jobs:
     env:
       # Inject variables (supports either TF_VAR_* or standard names, from vars or secrets)
       TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID || vars.PROJECT_ID || secrets.TF_VAR_PROJECT_ID || 'polan-words-assist' }}
-      TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID }}
+      TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID || 'poland_words_assist_bot' }}
       TF_VAR_telegram_bot_token: ${{ secrets.TF_VAR_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
       TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
       TF_VAR_elevenlabs_api_key: ${{ secrets.TF_VAR_ELEVENLABS_API_KEY || secrets.ELEVENLABS_API_KEY }}
@@ -198,7 +198,7 @@ jobs:
         working-directory: ./terraform
     env:
       TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID || vars.PROJECT_ID || secrets.TF_VAR_PROJECT_ID || 'polan-words-assist' }}
-      TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID }}
+      TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID || 'poland_words_assist_bot' }}
       TF_VAR_telegram_bot_token: ${{ secrets.TF_VAR_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
       TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
       TF_VAR_elevenlabs_api_key: ${{ secrets.TF_VAR_ELEVENLABS_API_KEY || secrets.ELEVENLABS_API_KEY }}

@@ -33,7 +33,7 @@ jobs:
         working-directory: ./terraform
     env:
       TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID || vars.PROJECT_ID || secrets.TF_VAR_PROJECT_ID || 'polan-words-assist' }}
-      TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID }}
+      TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID }}
       TF_VAR_telegram_bot_token: ${{ secrets.TF_VAR_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
       TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
       TF_VAR_elevenlabs_api_key: ${{ secrets.TF_VAR_ELEVENLABS_API_KEY || secrets.ELEVENLABS_API_KEY }}
@@ -72,7 +72,8 @@ jobs:
 
       - name: Terraform Plan Destroy
         run: |
-          terraform plan -destroy -no-color -out=destroy.tfplan -input=false | tee destroy_plan.txt
+          set -eo pipefail
+          terraform plan -destroy -no-color -out=destroy.tfplan -input=false 2>&1 | tee destroy_plan.txt
 
       - name: Generate Destroy Summary
         if: always()
@@ -89,6 +90,18 @@ jobs:
           if [ ! -f function-source.zip ]; then
             python3 -c "import shutil; shutil.make_archive('function-source', 'zip', '../src')"
           fi
+
+      - name: Validate Destroy Plan Exists
+        run: |
+          if [ ! -f destroy.tfplan ]; then
+            echo "::error::destroy.tfplan was not created by Terraform Plan Destroy!"
+            if [ -f destroy_plan.txt ]; then
+              echo "=== Terraform Plan Log ==="
+              cat destroy_plan.txt
+            fi
+            exit 1
+          fi
+          ls -lh destroy.tfplan
 
       - name: Archive Destroy Plan
         uses: actions/upload-artifact@v6
@@ -112,7 +125,7 @@ jobs:
         working-directory: ./terraform
     env:
       TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID || vars.PROJECT_ID || secrets.TF_VAR_PROJECT_ID || 'polan-words-assist' }}
-      TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID }}
+      TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID || 'poland_words_assist_bot' }}
       TF_VAR_telegram_bot_token: ${{ secrets.TF_VAR_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
       TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
       TF_VAR_elevenlabs_api_key: ${{ secrets.TF_VAR_ELEVENLABS_API_KEY || secrets.ELEVENLABS_API_KEY }}
