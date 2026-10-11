@@ -101,7 +101,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      # Authenticate to Google Cloud (Workload Identity Federation)
+      # Authenticate to Google Cloud (Workload Identity Federation )
       - name: Authenticate to Google Cloud (Workload Identity Federation)
         uses: google-github-actions/auth@v3
         with:
