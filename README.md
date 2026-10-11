@@ -25,14 +25,14 @@ Automated Polish vocabulary drill system for Telegram channels powered by Google
 
 ```text
 poland-words-assist/
-├── .env.example                     # Unified variables (.env) for local testing and HCP Terraform
+├── .env.example                     # Unified variables (.env) for local testing and Terraform
 ├── .gitignore                       # Git ignore rules for Python, Terraform, and secrets
 ├── README.md                        # Project documentation
 ├── antigravity_artifacts.md         # Reference architectural specification
 ├── src/                             # Cloud Function application source
 │   ├── main.py                      # Main entrypoint (functions-framework HTTP handler)
 │   └── requirements.txt             # Python runtime dependencies
-├── terraform/                       # Terraform infrastructure as code (HCP Cloud backend)
+├── terraform/                       # Terraform infrastructure as code (Google Cloud Storage GCS backend)
 │   ├── main.tf                      # Cloud Run Function, Secret Manager, Cloud Scheduler, IAM
 │   ├── variables.tf                 # Terraform input variables
 │   └── outputs.tf                   # Outputs (Function URI, Scheduler job name)
@@ -90,36 +90,43 @@ python -m unittest discover -s tests
 
 ---
 
-## ☁️ Deployment via HCP Terraform (Remote Execution)
+## ☁️ Deployment via Terraform (GCS Backend)
 
-Since the project uses HCP Terraform (`app.terraform.io` / `portal.cloud.hashicorp.com`) as the backend, **no local `terraform apply` is needed**. Runs, plans, and state management execute automatically in HCP Terraform.
+State management is stored in a dedicated Google Cloud Storage bucket (`polan-words-assist-static/tf-state-prd`).
 
-### 1. Workspace Configuration
-- **Organization**: `gkllc`
-- **Project**: `fabe8953-8918-4dc5-8d5f-7b72742c42d9` (`poland-words-assist`)
-- **Workspace**: `poland-words-assist`
+### 1. Backend Configuration
+Configured in `terraform/backend.tf`:
+- **Bucket**: `polan-words-assist-static`
+- **Prefix / Folder**: `tf-state-prd`
 
-### 2. Configure Variables in HCP Terraform
-Configure your workspace variables or variable sets in the HCP Terraform console (or link via `.env`):
-- `project_id` = GCP project ID (`polan-words-assist`)
-- `region` = GCP Region (e.g., `europe-west1`)
-- `time_zone` = Time zone for scheduler (e.g., `Europe/Warsaw`)
-- `telegram_bot_token` (sensitive) = Telegram Bot Token
-- `telegram_chat_id` = Channel username or ID
-- `openai_api_key` (sensitive) = OpenAI API Key
-- `elevenlabs_api_key` (sensitive) = ElevenLabs API Key
-- `elevenlabs_voice_id` = Voice ID (e.g., `pNInz6obpgDQGcFmaJgB`)
+### 2. Environment Variables & Credentials
+Ensure your terminal has Google Cloud authentication and variables configured:
+```bash
+# Authenticate with Google Cloud
+gcloud auth application-default login
 
-### 3. Remote Execution Workflow
-- **VCS-Driven (Recommended):** Connect your GitHub repository to the `poland-words-assist` workspace in HCP Terraform. Every push triggers speculative plans and automated applies in the cloud.
-- **CLI-Driven (Optional):** If running from your terminal, authenticate once and run speculative plans remotely:
-  ```bash
-  terraform login
-  cd terraform
-  terraform init
-  terraform plan
-  ```
-  *(The plan runs remotely on HCP Terraform infrastructure).*
+# Export your variables or supply them via terraform.tfvars / .env:
+export TF_VAR_project_id="polan-words-assist"
+export TF_VAR_telegram_bot_token="<your-token>"
+export TF_VAR_telegram_chat_id="<your-chat-id>"
+export TF_VAR_openai_api_key="<your-openai-key>"
+export TF_VAR_elevenlabs_api_key="<your-elevenlabs-key>"
+```
+
+### 3. Deploying Infrastructure
+Navigate to the `terraform/` directory:
+```bash
+cd terraform
+
+# Initialize with GCS backend (use -migrate-state if migrating existing state)
+terraform init
+
+# Review execution plan
+terraform plan
+
+# Apply changes
+terraform apply
+```
 
 Terraform will automatically:
 - Enable required Google Cloud APIs (`cloudfunctions`, `run`, `cloudscheduler`, `secretmanager`, etc.)

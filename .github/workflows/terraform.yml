@@ -1,0 +1,245 @@
+name: "Terraform CI/CD (GCP)"
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "terraform/**"
+      - "src/**"
+      - "tests/**"
+      - ".github/workflows/terraform.yml"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "terraform/**"
+      - "src/**"
+      - "tests/**"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+    inputs:
+      auto_apply:
+        description: "Apply Terraform plan automatically on manual trigger"
+        required: true
+        type: boolean
+        default: false
+
+# Prevent concurrent runs on production Terraform state
+concurrency:
+  group: terraform-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write      # Required for Workload Identity Federation OIDC
+  pull-requests: write # Required for posting plan summary to PRs
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # ============================================================================
+  # Stage 1: Quality Checks & Unit Tests
+  # ============================================================================
+  test-and-lint:
+    name: "Lint & Unit Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/requirements.txt
+
+      - name: Run Unit Tests
+        run: |
+          python -m unittest discover -s tests -v
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.8.0"
+          terraform_wrapper: false
+
+      - name: Terraform Format Check
+        run: |
+          terraform fmt -check -recursive terraform/
+
+  # ============================================================================
+  # Stage 2: Terraform Plan
+  # ============================================================================
+  plan:
+    name: "Terraform Plan"
+    needs: test-and-lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
+    env:
+      # Inject variables (supports either TF_VAR_* or standard names, from vars or secrets)
+      TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID || vars.PROJECT_ID || secrets.TF_VAR_PROJECT_ID }}
+      TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID }}
+      TF_VAR_telegram_bot_token: ${{ secrets.TF_VAR_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+      TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+      TF_VAR_elevenlabs_api_key: ${{ secrets.TF_VAR_ELEVENLABS_API_KEY || secrets.ELEVENLABS_API_KEY }}
+      TF_VAR_region: ${{ vars.TF_VAR_REGION || 'europe-west1' }}
+      TF_VAR_time_zone: ${{ vars.TF_VAR_TIME_ZONE || 'Europe/Warsaw' }}
+      TF_VAR_elevenlabs_voice_id: ${{ vars.TF_VAR_ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Google Cloud Auth: Option A (Workload Identity Federation - Recommended)
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        if: ${{ (secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '') || (vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '') }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER || vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT || vars.GCP_SERVICE_ACCOUNT }}
+
+      # Google Cloud Auth: Option B (Service Account Key JSON fallback)
+      - name: Authenticate to Google Cloud (Service Account Key)
+        if: ${{ (secrets.GCP_WORKLOAD_IDENTITY_PROVIDER == '') && (vars.GCP_WORKLOAD_IDENTITY_PROVIDER == '') && (secrets.GCP_SA_KEY != '') }}
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.8.0"
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -no-color -out=tfplan -input=false | tee plan_output.txt
+
+      - name: Generate Plan Summary for Job
+        if: always()
+        run: |
+          echo "### 📋 Terraform Plan Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```terraform' >> $GITHUB_STEP_SUMMARY
+          if [ -f plan_output.txt ]; then
+            grep -E "Plan:|No changes." plan_output.txt >> $GITHUB_STEP_SUMMARY || tail -n 20 plan_output.txt >> $GITHUB_STEP_SUMMARY
+          fi
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Post Plan to Pull Request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let planText = 'No plan output found.';
+            if (fs.existsSync('terraform/plan_output.txt')) {
+              planText = fs.readFileSync('terraform/plan_output.txt', 'utf8');
+            }
+            // Truncate to fit GitHub PR comment limit if needed
+            const maxLen = 60000;
+            if (planText.length > maxLen) {
+              planText = planText.substring(0, maxLen) + '\n... [Plan output truncated]';
+            }
+            const body = `#### 🌐 Terraform Plan Output
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${planText}
+            \`\`\`
+
+            </details>
+
+            *Pushed by: @${{ github.actor }} | Branch: \`${{ github.head_ref }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Archive Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: terraform/tfplan
+          retention-days: 2
+
+  # ============================================================================
+  # Stage 3: Terraform Apply (Production)
+  # ============================================================================
+  apply:
+    name: "Terraform Apply"
+    needs: plan
+    # Only run on push to master or when workflow_dispatch auto_apply is true
+    if: |
+      (github.ref == 'refs/heads/master' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && inputs.auto_apply == true)
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: ./terraform
+    env:
+      TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID || vars.PROJECT_ID || secrets.TF_VAR_PROJECT_ID }}
+      TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID }}
+      TF_VAR_telegram_bot_token: ${{ secrets.TF_VAR_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+      TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+      TF_VAR_elevenlabs_api_key: ${{ secrets.TF_VAR_ELEVENLABS_API_KEY || secrets.ELEVENLABS_API_KEY }}
+      TF_VAR_region: ${{ vars.TF_VAR_REGION || 'europe-west1' }}
+      TF_VAR_time_zone: ${{ vars.TF_VAR_TIME_ZONE || 'Europe/Warsaw' }}
+      TF_VAR_elevenlabs_voice_id: ${{ vars.TF_VAR_ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Google Cloud Auth: Option A (Workload Identity Federation)
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        if: ${{ (secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '') || (vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '') }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER || vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT || vars.GCP_SERVICE_ACCOUNT }}
+
+      # Google Cloud Auth: Option B (Service Account Key JSON fallback)
+      - name: Authenticate to Google Cloud (Service Account Key)
+        if: ${{ (secrets.GCP_WORKLOAD_IDENTITY_PROVIDER == '') && (vars.GCP_WORKLOAD_IDENTITY_PROVIDER == '') && (secrets.GCP_SA_KEY != '') }}
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.8.0"
+          terraform_wrapper: false
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: terraform
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -input=false tfplan
