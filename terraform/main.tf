@@ -166,8 +166,8 @@ resource "google_cloud_run_service_iam_member" "invoker_role" {
 # --- Cloud Scheduler (Every 3 hours during day) ---
 resource "google_cloud_scheduler_job" "cron_trigger" {
   name             = "polish-vocab-3h-cron"
-  description      = "Trigger Polish vocab generation every 3 hours (9:00 - 21:00)"
-  schedule         = "0 9,12,15,18,21 * * *"
+  description      = "Trigger Polish vocab generation every 3 hours (12:00 - 21:00)"
+  schedule         = "0 12,15,18,21 * * *"
   time_zone        = var.time_zone
   attempt_deadline = "180s"
 
