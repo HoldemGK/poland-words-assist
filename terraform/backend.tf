@@ -1,13 +1,9 @@
 terraform {
   required_version = ">= 1.6.0"
 
-  cloud {
-    organization = "gkllc"
-
-    workspaces {
-      name    = "poland-words-assist"
-      project = "fabe8953-8918-4dc5-8d5f-7b72742c42d9"
-    }
+  backend "gcs" {
+    bucket = "polan-words-assist-static"
+    prefix = "tf-state-prd"
   }
 
   required_providers {

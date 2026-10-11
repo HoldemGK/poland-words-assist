@@ -25,14 +25,14 @@ Automated Polish vocabulary drill system for Telegram channels powered by Google
 
 ```text
 poland-words-assist/
-├── .env.example                     # Unified variables (.env) for local testing and HCP Terraform
+├── .env.example                     # Unified variables (.env) for local testing and Terraform
 ├── .gitignore                       # Git ignore rules for Python, Terraform, and secrets
 ├── README.md                        # Project documentation
 ├── antigravity_artifacts.md         # Reference architectural specification
 ├── src/                             # Cloud Function application source
 │   ├── main.py                      # Main entrypoint (functions-framework HTTP handler)
 │   └── requirements.txt             # Python runtime dependencies
-├── terraform/                       # Terraform infrastructure as code (HCP Cloud backend)
+├── terraform/                       # Terraform infrastructure as code (Google Cloud Storage GCS backend)
 │   ├── main.tf                      # Cloud Run Function, Secret Manager, Cloud Scheduler, IAM
 │   ├── variables.tf                 # Terraform input variables
 │   └── outputs.tf                   # Outputs (Function URI, Scheduler job name)
@@ -90,36 +90,43 @@ python -m unittest discover -s tests
 
 ---
 
-## ☁️ Deployment via HCP Terraform (Remote Execution)
+## ☁️ Deployment via Terraform (GCS Backend)
 
-Since the project uses HCP Terraform (`app.terraform.io` / `portal.cloud.hashicorp.com`) as the backend, **no local `terraform apply` is needed**. Runs, plans, and state management execute automatically in HCP Terraform.
+State management is stored in a dedicated Google Cloud Storage bucket (`polan-words-assist-static/tf-state-prd`).
 
-### 1. Workspace Configuration
-- **Organization**: `gkllc`
-- **Project**: `fabe8953-8918-4dc5-8d5f-7b72742c42d9` (`poland-words-assist`)
-- **Workspace**: `poland-words-assist`
+### 1. Backend Configuration
+Configured in `terraform/backend.tf`:
+- **Bucket**: `polan-words-assist-static`
+- **Prefix / Folder**: `tf-state-prd`
 
-### 2. Configure Variables in HCP Terraform
-Configure your workspace variables or variable sets in the HCP Terraform console (or link via `.env`):
-- `project_id` = GCP project ID (`polan-words-assist`)
-- `region` = GCP Region (e.g., `europe-west1`)
-- `time_zone` = Time zone for scheduler (e.g., `Europe/Warsaw`)
-- `telegram_bot_token` (sensitive) = Telegram Bot Token
-- `telegram_chat_id` = Channel username or ID
-- `openai_api_key` (sensitive) = OpenAI API Key
-- `elevenlabs_api_key` (sensitive) = ElevenLabs API Key
-- `elevenlabs_voice_id` = Voice ID (e.g., `pNInz6obpgDQGcFmaJgB`)
+### 2. Environment Variables & Credentials
+Ensure your terminal has Google Cloud authentication and variables configured:
+```bash
+# Authenticate with Google Cloud
+gcloud auth application-default login
 
-### 3. Remote Execution Workflow
-- **VCS-Driven (Recommended):** Connect your GitHub repository to the `poland-words-assist` workspace in HCP Terraform. Every push triggers speculative plans and automated applies in the cloud.
-- **CLI-Driven (Optional):** If running from your terminal, authenticate once and run speculative plans remotely:
-  ```bash
-  terraform login
-  cd terraform
-  terraform init
-  terraform plan
-  ```
-  *(The plan runs remotely on HCP Terraform infrastructure).*
+# Export your variables or supply them via terraform.tfvars / .env:
+export TF_VAR_project_id="polan-words-assist"
+export TF_VAR_telegram_bot_token="<your-token>"
+export TF_VAR_telegram_chat_id="<your-chat-id>"
+export TF_VAR_openai_api_key="<your-openai-key>"
+export TF_VAR_elevenlabs_api_key="<your-elevenlabs-key>"
+```
+
+### 3. Deploying Infrastructure
+Navigate to the `terraform/` directory:
+```bash
+cd terraform
+
+# Initialize with GCS backend (use -migrate-state if migrating existing state)
+terraform init
+
+# Review execution plan
+terraform plan
+
+# Apply changes
+terraform apply
+```
 
 Terraform will automatically:
 - Enable required Google Cloud APIs (`cloudfunctions`, `run`, `cloudscheduler`, `secretmanager`, etc.)
@@ -151,3 +158,64 @@ gcloud functions logs read polish-vocab-generator --gen2 --region=europe-west1 -
 - **Strict OIDC Authentication**: Cloud Scheduler invokes the Cloud Run Function using a dedicated Service Account with OIDC token authentication; unauthorized public invocations are blocked.
 - **Robust Failure Fallback**: If ElevenLabs TTS quota is exceeded or fails, the bot automatically falls back to delivering formatted HTML text messages so users never miss a vocabulary update.
 - **HTML Injection Safety**: All dynamic strings (word, sentence, translation) are escaped before composing Telegram HTML payloads to prevent entity parsing errors.
+
+
+To configure GitHub Actions to deploy resources to Google Cloud using your service account, using static JSON service account keys is no longer recommended as they present a significant security risk (they do not expire and can be leaked easily).
+
+Instead, the modern and secure best practice is to configure Workload Identity Federation (WIF). Workload Identity Federation allows GitHub Actions to authenticate directly with Google Cloud using short-lived, OpenID Connect (OIDC) tokens, eliminating the need to store or rotate JSON keys.
+
+Here is the complete set of gcloud commands to configure Workload Identity Federation on the Google Cloud side.
+
+Step 1: Set Up Variables
+Before running the commands, define the variables for your setup (replace <GITHUB_ORGANIZATION_OR_USER> and <GITHUB_REPO> with your actual repository details):
+
+# Variables
+PROJECT_ID="polan-words-assist"
+POOL_NAME="github-pool"
+PROVIDER_NAME="github-provider"
+SERVICE_ACCOUNT_EMAIL="tf-cloud@polan-words-assist.iam.gserviceaccount.com"
+GITHUB_REPO="<GITHUB_ORGANIZATION_OR_USER>/<GITHUB_REPO>" # e.g., "my-org/my-repo"
+# Variables
+PROJECT_ID="polan-words-assist"
+POOL_NAME="github-pool"
+PROVIDER_NAME="github-provider"
+SERVICE_ACCOUNT_EMAIL="tf-cloud@polan-words-assist.iam.gserviceaccount.com"
+GITHUB_REPO="<GITHUB_ORGANIZATION_OR_USER>/<GITHUB_REPO>" # e.g., "my-org/my-repo"
+Generated code may be subject to license restrictions not shown here. Use code with care. Learn more 
+
+Step 2: Enable the Required APIs
+Enable the IAM Credentials and Workload Credentials APIs in your project:
+
+gcloud services enable iamcredentials.googleapis.com \
+    --project="${PROJECT_ID}"
+
+
+Step 3: Create the Workload Identity Pool
+Create a pool that will manage the identities coming from GitHub:
+
+gcloud iam workload-identity-pools create "${POOL_NAME}" \
+    --project="${PROJECT_ID}" \
+    --location="global" \
+    --display-name="GitHub Actions Pool"
+
+Step 4: Create the Workload Identity Provider
+Create the OIDC provider inside the pool. This maps GitHub's claims (such as repository, actor, etc.) to Google Cloud IAM attributes:
+
+gcloud iam workload-identity-pools providers create-oidc github-actions --project="${PROJECT_ID}" --location="global" --workload-identity-pool=github-actions --display-name="GitHub Provider" --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" --issuer-uri="https://token.actions.githubusercontent.com" --attribute-condition="assertion.repository_owner == 'HoldemGK'"
+
+Step 5: Grant the GitHub Repo Permission to Impersonate the Service Account
+Authorize your specific GitHub repository to impersonate your service account tf-cloud using the Workload Identity Pool. This restricts access to only your specified repository:
+
+# Retrieve the full unique ID of your Workload Identity Pool
+POOL_ID=$(gcloud iam workload-identity-pools describe "${POOL_NAME}" \
+    --project="${PROJECT_ID}" \
+    --location="global" \
+    --format="value(name)")
+# Grant the Workload Identity User role to your repository
+gcloud iam service-accounts add-iam-policy-binding "${SERVICE_ACCOUNT_EMAIL}" \
+    --project="${PROJECT_ID}" \
+    --role="roles/iam.workloadIdentityUser" \
+    --member="principalSet://iam.googleapis.com/${POOL_ID}/attribute.repository/${GITHUB_REPO}"
+
+Step 6: GitHub Actions Workflow Integration
+On the GitHub side, you do not need to paste any JSON keys into your repository secrets. Instead, you only need to reference your project settings using the official Google Authentication Action (google-github-actions/auth)
