@@ -1,0 +1,40 @@
+name: Terraform Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  id-token: write # This is MANDATORY for OIDC/Workload Identity Federation
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # 1. Authenticate with Google Cloud using WIF
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: 'projects/975371324486/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+        service_account: 'tf-cloud@polan-words-assist.iam.gserviceaccount.com'
+
+    # 2. Set up Terraform
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+
+    # 3. Run Terraform Commands
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Plan
+      run: terraform plan
+
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/master'
+      run: terraform apply -auto-approve

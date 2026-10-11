@@ -87,7 +87,7 @@ jobs:
         working-directory: ./terraform
     env:
       # Inject variables (supports either TF_VAR_* or standard names, from vars or secrets)
-      TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID || vars.PROJECT_ID || secrets.TF_VAR_PROJECT_ID }}
+      TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID || vars.PROJECT_ID || secrets.TF_VAR_PROJECT_ID || 'polan-words-assist' }}
       TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID }}
       TF_VAR_telegram_bot_token: ${{ secrets.TF_VAR_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
       TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
@@ -107,13 +107,6 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER || vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT || vars.GCP_SERVICE_ACCOUNT }}
-
-      # Google Cloud Auth: Option B (Service Account Key JSON fallback)
-      - name: Authenticate to Google Cloud (Service Account Key)
-        if: ${{ (secrets.GCP_WORKLOAD_IDENTITY_PROVIDER == '') && (vars.GCP_WORKLOAD_IDENTITY_PROVIDER == '') && (secrets.GCP_SA_KEY != '') }}
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -188,7 +181,6 @@ jobs:
   apply:
     name: "Terraform Apply"
     needs: plan
-    # Only run on push to master or when workflow_dispatch auto_apply is true
     if: |
       (github.ref == 'refs/heads/master' && github.event_name == 'push') ||
       (github.event_name == 'workflow_dispatch' && inputs.auto_apply == true)
@@ -198,7 +190,7 @@ jobs:
       run:
         working-directory: ./terraform
     env:
-      TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID || vars.PROJECT_ID || secrets.TF_VAR_PROJECT_ID }}
+      TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID || vars.PROJECT_ID || secrets.TF_VAR_PROJECT_ID || 'polan-words-assist' }}
       TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID }}
       TF_VAR_telegram_bot_token: ${{ secrets.TF_VAR_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
       TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
@@ -211,20 +203,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Google Cloud Auth: Option A (Workload Identity Federation)
+      # Workload Identity Federation
       - name: Authenticate to Google Cloud (Workload Identity Federation)
         if: ${{ (secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '') || (vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '') }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER || vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT || vars.GCP_SERVICE_ACCOUNT }}
-
-      # Google Cloud Auth: Option B (Service Account Key JSON fallback)
-      - name: Authenticate to Google Cloud (Service Account Key)
-        if: ${{ (secrets.GCP_WORKLOAD_IDENTITY_PROVIDER == '') && (vars.GCP_WORKLOAD_IDENTITY_PROVIDER == '') && (secrets.GCP_SA_KEY != '') }}
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
