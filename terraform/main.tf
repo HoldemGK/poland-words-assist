@@ -15,7 +15,7 @@ resource "google_project_service" "enabled_apis" {
     "cloudresourcemanager.googleapis.com"
   ])
   service            = each.key
-  disable_on_destroy = false
+  disable_on_destroy = true
 }
 
 # --- Service Account for Invoker & Runtime ---

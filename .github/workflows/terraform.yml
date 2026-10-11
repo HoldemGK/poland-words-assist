@@ -169,12 +169,14 @@ jobs:
               body: body
             });
 
-      - name: Archive Terraform Plan
+      - name: Archive Terraform Plan and Function Package
         if: success()
         uses: actions/upload-artifact@v6
         with:
           name: tfplan
-          path: terraform/tfplan
+          path: |
+            terraform/tfplan
+            terraform/function-source.zip
           retention-days: 2
 
   # ============================================================================
@@ -218,11 +220,19 @@ jobs:
           terraform_version: "1.8.0"
           terraform_wrapper: false
 
-      - name: Download Terraform Plan
+      - name: Download Terraform Plan and Function Package
         uses: actions/download-artifact@v6
         with:
           name: tfplan
           path: terraform
+
+      - name: Verify Function Package
+        run: |
+          if [ ! -f function-source.zip ]; then
+            echo "function-source.zip not found, generating from src..."
+            python3 -c "import shutil; shutil.make_archive('function-source', 'zip', '../src')"
+          fi
+          ls -lh function-source.zip tfplan
 
       - name: Terraform Init
         run: terraform init
