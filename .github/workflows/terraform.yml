@@ -185,9 +185,10 @@ jobs:
   apply:
     name: "Terraform Apply"
     needs: plan
-    if: |
-      (github.ref == 'refs/heads/master' && github.event_name == 'push') ||
-      (github.event_name == 'workflow_dispatch' && inputs.auto_apply == true)
+    if: false # Temporarily disabled — will skip on merge/push
+    # if: |
+    #   (github.ref == 'refs/heads/master' && github.event_name == 'push') ||
+    #   (github.event_name == 'workflow_dispatch' && inputs.auto_apply == true)
     runs-on: ubuntu-latest
     environment: production
     defaults:
