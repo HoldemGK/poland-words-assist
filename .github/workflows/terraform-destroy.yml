@@ -1,0 +1,141 @@
+name: "Terraform Destroy (GCP)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type 'DESTROY' in uppercase to confirm infrastructure deletion"
+        required: true
+        type: string
+
+# Share concurrency group with deployment pipeline to prevent race conditions
+concurrency:
+  group: terraform-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # Required for Workload Identity Federation OIDC
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # ============================================================================
+  # Stage 1: Validate Confirmation & Plan Destruction
+  # ============================================================================
+  plan-destroy:
+    name: "Plan Destroy"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
+    env:
+      TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID || vars.PROJECT_ID || secrets.TF_VAR_PROJECT_ID || 'polan-words-assist' }}
+      TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID }}
+      TF_VAR_telegram_bot_token: ${{ secrets.TF_VAR_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+      TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+      TF_VAR_elevenlabs_api_key: ${{ secrets.TF_VAR_ELEVENLABS_API_KEY || secrets.ELEVENLABS_API_KEY }}
+      TF_VAR_region: ${{ vars.TF_VAR_REGION || 'europe-west1' }}
+      TF_VAR_time_zone: ${{ vars.TF_VAR_TIME_ZONE || 'Europe/Warsaw' }}
+      TF_VAR_elevenlabs_voice_id: ${{ vars.TF_VAR_ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB' }}
+
+    steps:
+      - name: Verify Confirmation Input
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "DESTROY" ]; then
+            echo "::error::Confirmation mismatch! You must type 'DESTROY' in all caps to proceed with deletion."
+            exit 1
+          fi
+          echo "Confirmation verified. Proceeding with destroy plan."
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # Authenticate to Google Cloud (Workload Identity Federation)
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER || secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT || secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.8.0"
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan Destroy
+        run: |
+          terraform plan -destroy -no-color -out=destroy.tfplan -input=false | tee destroy_plan.txt
+
+      - name: Generate Destroy Summary
+        if: always()
+        run: |
+          echo "### ⚠️ Terraform Destroy Plan Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```terraform' >> $GITHUB_STEP_SUMMARY
+          if [ -f destroy_plan.txt ]; then
+            grep -E "Plan:|No changes." destroy_plan.txt >> $GITHUB_STEP_SUMMARY || tail -n 20 destroy_plan.txt >> $GITHUB_STEP_SUMMARY
+          fi
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Archive Destroy Plan
+        uses: actions/upload-artifact@v6
+        with:
+          name: destroy-tfplan
+          path: terraform/destroy.tfplan
+          retention-days: 1
+
+  # ============================================================================
+  # Stage 2: Execute Destruction (Production Environment Gate)
+  # ============================================================================
+  apply-destroy:
+    name: "Apply Destroy"
+    needs: plan-destroy
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: ./terraform
+    env:
+      TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID || vars.PROJECT_ID || secrets.TF_VAR_PROJECT_ID || 'polan-words-assist' }}
+      TF_VAR_telegram_chat_id: ${{ vars.TF_VAR_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TF_VAR_TELEGRAM_CHAT_ID }}
+      TF_VAR_telegram_bot_token: ${{ secrets.TF_VAR_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+      TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+      TF_VAR_elevenlabs_api_key: ${{ secrets.TF_VAR_ELEVENLABS_API_KEY || secrets.ELEVENLABS_API_KEY }}
+      TF_VAR_region: ${{ vars.TF_VAR_REGION || 'europe-west1' }}
+      TF_VAR_time_zone: ${{ vars.TF_VAR_TIME_ZONE || 'Europe/Warsaw' }}
+      TF_VAR_elevenlabs_voice_id: ${{ vars.TF_VAR_ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # Authenticate to Google Cloud (Workload Identity Federation)
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER || secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT || secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.8.0"
+          terraform_wrapper: false
+
+      - name: Download Destroy Plan
+        uses: actions/download-artifact@v6
+        with:
+          name: destroy-tfplan
+          path: terraform
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply Destroy
+        run: terraform apply -input=false destroy.tfplan
