@@ -211,7 +211,7 @@ POOL_ID=$(gcloud iam workload-identity-pools describe "${POOL_NAME}" \
     --project="${PROJECT_ID}" \
     --location="global" \
     --format="value(name)")
-# Grant the Workload Identity User role to your repository
+# Grant the Workload Identity User role to your  repository
 gcloud iam service-accounts add-iam-policy-binding "${SERVICE_ACCOUNT_EMAIL}" \
     --project="${PROJECT_ID}" \
     --role="roles/iam.workloadIdentityUser" \
