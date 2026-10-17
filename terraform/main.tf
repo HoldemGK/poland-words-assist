@@ -20,7 +20,7 @@ resource "google_project_service" "enabled_apis" {
 # --- Service Account for Invoker & Runtime ---
 resource "google_service_account" "bot_sa" {
   account_id   = "polish-vocab-bot-sa"
-  display_name = "Polish Vocab Bot Cloud Run Service Account"
+  display_name = "Polish Vocab Bot Cloud Run Service Account test"
   depends_on   = [google_project_service.enabled_apis]
 }
 
