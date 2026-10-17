@@ -11,7 +11,9 @@ resource "google_project_service" "enabled_apis" {
     "artifactregistry.googleapis.com",
     "storage.googleapis.com",
     "iam.googleapis.com",
-    "serviceusage.googleapis.com"
+    "serviceusage.googleapis.com",
+    "bigquery.googleapis.com",
+    "logging.googleapis.com"
   ])
   service            = each.key
   disable_on_destroy = false
@@ -189,3 +191,38 @@ resource "google_cloud_scheduler_job" "cron_trigger" {
     google_cloud_run_service_iam_member.invoker_role
   ]
 }
+
+# --- BigQuery Telemetry Dataset & Log Sink ---
+resource "google_bigquery_dataset" "telemetry" {
+  dataset_id                  = "vocab_bot_telemetry"
+  friendly_name               = "Vocab Bot Telemetry & Consumption Hub"
+  description                 = "Aggregated consumption logs and metrics for OpenAI, ElevenLabs, Telegram, and GCP"
+  location                    = var.region
+  default_table_expiration_ms = null
+
+  depends_on = [google_project_service.enabled_apis]
+}
+
+resource "google_logging_project_sink" "consumption_sink" {
+  name                   = "vocab-bot-consumption-sink"
+  description            = "Routes structured consumption logs from Cloud Run to BigQuery"
+  destination            = "bigquery.googleapis.com/projects/${var.project_id}/datasets/${google_bigquery_dataset.telemetry.dataset_id}"
+  filter                 = "resource.type=\"cloud_run_revision\" AND jsonPayload.telemetry_type=\"service_consumption\""
+  unique_writer_identity = true
+
+  bigquery_options {
+    use_partitioned_tables = true
+  }
+
+  depends_on = [
+    google_project_service.enabled_apis,
+    google_bigquery_dataset.telemetry
+  ]
+}
+
+resource "google_bigquery_dataset_iam_member" "log_sink_writer" {
+  dataset_id = google_bigquery_dataset.telemetry.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = google_logging_project_sink.consumption_sink.writer_identity
+}
+

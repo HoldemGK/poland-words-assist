@@ -224,6 +224,77 @@ class TestSendVocabTaskHandler(unittest.TestCase):
         last_call_url = calls[-1][0][0]
         self.assertIn("sendMessage", last_call_url)
 
+    @patch.dict(os.environ, {
+        "TELEGRAM_BOT_TOKEN": "mock_token",
+        "TELEGRAM_CHAT_ID": "@mock_channel",
+        "OPENAI_API_KEY": "mock_openai",
+        "ELEVENLABS_API_KEY": "mock_eleven",
+    })
+    @patch("main.logger.info")
+    @patch("main.httpx.Client")
+    def test_telemetry_emission_with_usage_and_subscription(self, mock_client_cls, mock_logger_info):
+        import json
+        mock_client = MagicMock()
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+
+        mock_chat_resp = MagicMock(status_code=200)
+        mock_chat_resp.json.return_value = {
+            "result": {"pinned_message": {"text": "1. kot - кот"}}
+        }
+
+        mock_openai_resp = MagicMock(status_code=200)
+        mock_openai_resp.json.return_value = {
+            "choices": [{
+                "message": {
+                    "content": '{"items": [{"word": "kot", "pl_sentence": "Kot śpi na kanapie.", "ru_translation": "Кот спит на диване."}]}'
+                }
+            }],
+            "usage": {
+                "prompt_tokens": 150,
+                "completion_tokens": 50,
+                "total_tokens": 200,
+            }
+        }
+        mock_tts_resp = MagicMock(status_code=200, content=b"mp3_data_bytes")
+        mock_send_voice_resp = MagicMock(status_code=200)
+
+        mock_client.post.side_effect = [
+            mock_chat_resp,
+            mock_openai_resp,
+            mock_tts_resp,
+            mock_send_voice_resp,
+        ]
+
+        # Mock ElevenLabs subscription endpoint
+        mock_sub_resp = MagicMock(status_code=200)
+        mock_sub_resp.json.return_value = {
+            "character_count": 5000,
+            "character_limit": 30000,
+        }
+        mock_client.get.return_value = mock_sub_resp
+
+        response, status = send_vocab_task(MagicMock())
+        self.assertEqual(status, 200)
+
+        # Inspect logged telemetry payload
+        telemetry_payload = None
+        for call_args in mock_logger_info.call_args_list:
+            arg_str = call_args[0][0]
+            if isinstance(arg_str, str) and "service_consumption" in arg_str:
+                telemetry_payload = json.loads(arg_str)
+                break
+
+        self.assertIsNotNone(telemetry_payload)
+        self.assertEqual(telemetry_payload["status"], "success")
+        self.assertEqual(telemetry_payload["openai"]["prompt_tokens"], 150)
+        self.assertEqual(telemetry_payload["openai"]["completion_tokens"], 50)
+        self.assertEqual(telemetry_payload["openai"]["total_tokens"], 200)
+        self.assertGreater(telemetry_payload["openai"]["cost_usd"], 0)
+        self.assertEqual(telemetry_payload["elevenlabs"]["account_character_count"], 5000)
+        self.assertEqual(telemetry_payload["elevenlabs"]["account_character_limit"], 30000)
+        self.assertEqual(telemetry_payload["elevenlabs"]["account_percent_used"], 16.67)
+        self.assertEqual(telemetry_payload["telegram"]["voices_sent"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
