@@ -82,7 +82,7 @@ jobs:
   plan:
     name: "Terraform Plan"
     needs: test-and-lint
-    if: false # TODO: Temporarily disabled — will skip on merge/push
+    #if: false # TODO: Temporarily disabled — will skip on merge/push
     runs-on: ubuntu-latest
     defaults:
       run:
