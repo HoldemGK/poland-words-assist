@@ -159,6 +159,33 @@ gcloud functions logs read polish-vocab-generator --gen2 --region=europe-west1 -
 - **Robust Failure Fallback**: If ElevenLabs TTS quota is exceeded or fails, the bot automatically falls back to delivering formatted HTML text messages so users never miss a vocabulary update.
 - **HTML Injection Safety**: All dynamic strings (word, sentence, translation) are escaped before composing Telegram HTML payloads to prevent entity parsing errors.
 
+---
+
+## 📊 Centralized Consumption & Telemetry (BigQuery + Looker Studio)
+
+All API consumption across OpenAI (`gpt-4o-mini`), ElevenLabs (`eleven_multilingual_v2`), Telegram, and Google Cloud Run Functions is tracked in real-time in a unified BigQuery data warehouse and visualized on Looker Studio.
+
+### Architecture
+1. **Application Structured Logging**: At the end of every run, [`send_vocab_task`](file:///d:/GK/Proj/poland-words-assist/src/main.py#L48-L218) emits a structured JSON log containing:
+   - **OpenAI**: Prompt tokens, completion tokens, total tokens, and USD cost.
+   - **ElevenLabs**: Characters synthesized in this run, audio payload size, and current account-level quota status (`character_count` vs `character_limit`).
+   - **Telegram**: Voice notes sent, fallback text messages sent, audio payload bytes, and network status.
+   - **GCP Runtime**: Execution duration (`ms`) and memory footprint.
+2. **GCP Log Router**: Routes all logs matching `jsonPayload.telemetry_type="service_consumption"` into the BigQuery dataset `vocab_bot_telemetry`.
+3. **BigQuery View**: [`scripts/create_telemetry_view.sql`](file:///d:/GK/Proj/poland-words-assist/scripts/create_telemetry_view.sql) creates the view `vocab_bot_telemetry.v_consumption_metrics`, flattening all nested fields for plug-and-play Looker Studio reporting.
+4. **Looker Studio Dashboard**: Provides scorecards for total spend ($), ElevenLabs quota gauge, token consumption charts, and run-by-run audit logs.
+
+### Setting Up the Looker Studio Dashboard
+1. Deploy updated Terraform infrastructure:
+   ```bash
+   cd terraform && terraform apply
+   ```
+2. Trigger the Cloud Run function once (via Cloud Scheduler or `gcloud scheduler jobs run polish-vocab-3h-cron`) to generate the initial telemetry log.
+3. In the Google Cloud BigQuery Console, execute the SQL script:
+   [`scripts/create_telemetry_view.sql`](file:///d:/GK/Proj/poland-words-assist/scripts/create_telemetry_view.sql).
+4. Open [Looker Studio](https://lookerstudio.google.com/), click **Create > Data Source**, select **BigQuery**, choose your project `polan-words-assist`, dataset `vocab_bot_telemetry`, and table/view `v_consumption_metrics`.
+5. Add Scorecards and Time Series charts for OpenAI cost, ElevenLabs quota %, and Telegram delivery counts.
+
 
 To configure GitHub Actions to deploy resources to Google Cloud using your service account, using static JSON service account keys is no longer recommended as they present a significant security risk (they do not expire and can be leaked easily).
 
