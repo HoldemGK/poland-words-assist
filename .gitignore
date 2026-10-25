@@ -63,5 +63,5 @@ terraform/function-source.zip
 Thumbs.db
 
 # AI Artifacts
-.ai_artifacts/
+ai_artifacts/*
 
