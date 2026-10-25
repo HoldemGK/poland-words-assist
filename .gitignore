@@ -61,3 +61,7 @@ terraform/function-source.zip
 *.swo
 .DS_Store
 Thumbs.db
+
+# AI Artifacts
+.ai_artifacts/
+
