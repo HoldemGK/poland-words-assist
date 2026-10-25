@@ -93,7 +93,9 @@ def emit_telemetry(
     }
     if extra:
         payload["extra"] = extra
-    logger.info(json.dumps(payload))
+    json_str = json.dumps(payload)
+    print(json_str, flush=True)
+    logger.info(json_str)
 
 
 @functions_framework.http
