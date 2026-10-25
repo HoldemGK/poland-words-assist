@@ -95,6 +95,7 @@ resource "google_storage_bucket" "source_bucket" {
   name                        = "${var.project_id}-vocab-bot-source"
   location                    = var.region
   uniform_bucket_level_access = true
+  force_destroy               = true
   depends_on                  = [google_project_service.enabled_apis]
 }
 
@@ -199,6 +200,7 @@ resource "google_bigquery_dataset" "telemetry" {
   description                 = "Aggregated consumption logs and metrics for OpenAI, ElevenLabs, Telegram, and GCP"
   location                    = var.region
   default_table_expiration_ms = null
+  delete_contents_on_destroy  = true
 
   depends_on = [google_project_service.enabled_apis]
 }
